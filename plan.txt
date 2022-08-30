@@ -1,0 +1,9 @@
+1. use cnn to identify all person objects in the frames
+2. get neural network embeddings for the blue jersey + red jersey + referee
+object frames
+3. for each frame, label the five closest frames to each of the above (using
+euclidean distance) to that entity. for referee, just set a threshold based
+on trial and error. You may have to do some manual labelling to get the
+desired frames and see what embeddings they generate.
+4. add functionality to do the above, and then get the relevant json / labels of
+the model at each frame with that.

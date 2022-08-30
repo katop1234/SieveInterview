@@ -1,16 +1,12 @@
-# This is a sample Python script.
+# model to detect all person frames
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+# have a helper function that can pull up the person object's frame for a target
+# frame to make manual classification easier.
 
+# manually parse through some of the frames for each desired category and get
+# their embedding. store these somewhere as reference
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
-
-
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+# go through each person objects recognized and calculate the sum euclidean
+# distance to each of the desired categories, and pick the top n of each to
+# classify as being the that type. also have a way to store the objects in a
+# json for each frame, should be given to you in the setup for the models.2
