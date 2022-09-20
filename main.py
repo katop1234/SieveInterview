@@ -1,26 +1,48 @@
 # model to detect all person frames
-import cv2, os
 from helpers import *
 
 video_filename = get_video_filename()
 cap = cv2.VideoCapture(video_filename)
 
-while True:
+model = get_yolo_model()
+
+while 0:
    ret, frame = cap.read()
    cv2.imshow('frame',frame)
    if cv2.waitKey(1) & 0xFF == ord('q') or ret==False:
        cap.release()
        cv2.destroyAllWindows()
        break
-   cv2.imshow('frame',frame)
+    # Inference
+   results = model(frame)
 
-# have a helper function that can pull up the person object's frame for a target
-# frame to make manual classification easier.
+   # Results
+   results.print()  # or .show(), .save(), .crop(), .pandas(), etc.
 
-# manually parse through some of the frames for each desired category and get
-# their embedding. store these somewhere as reference
+ret, frame = cap.read()
+results = model(frame)
 
-# go through each person objects recognized and calculate the sum euclidean
-# distance to each of the desired categories, and pick the top n of each to
-# classify as being the that type. also have a way to store the objects in a
-# json for each frame, should be given to you in the setup for the models.2
+# Results
+results.print()  # or .show(), .save(), .crop(), .pandas(), etc.
+results.show()
+
+# Get boxes
+print("FIRST", results.xyxyn)
+
+boxes = results.xyxyn[0]
+print(len(boxes), len(boxes[0]), len(boxes[0][0]))
+
+# Get unique cropped image
+height = frame.shape[0]
+width = frame.shape[1]
+
+x1 = int((boxes[0][0]) * width)
+y1 = int((boxes[0][1]) * height)
+x2 = int((boxes[0][2]) * width)
+y2 = int((boxes[0][3]) * height)
+
+cropped_image = frame[y1:y2, x1:x2]
+plt.imshow(cropped_image)
+cv2.imwrite('test1.png', cropped_image)
+
+
