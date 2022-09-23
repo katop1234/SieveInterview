@@ -1,5 +1,6 @@
 import torch
 import psutil
+import shutil
 import cv2
 import os
 import matplotlib.pyplot as plt
@@ -18,6 +19,30 @@ def get_yolo_model():
 
 def tensor_row_is_person(row):
     return row[5] == 0
+
+def get_pixel_values_for_detections(detections, height, width):
+    # original input is of the form [x1, y1, x2, y2]
+    # where each value is actually a proportion from 0 to 1 of the pixel number
+    # we need it to be of the form [x1, y1, w, h] where each is the
+    # actual pixel count (an integer)
+
+    new_detections = []
+    for detection in detections:
+        x = int(detection[0] * width)
+        y = int(detection[1] * height)
+        w = int((detection[2] - detection[0]) * width)
+        h = int((detection[3] - detection[1]) * height)
+        new_detections.append([x, y, w, h])
+
+    return new_detections
+
+def get_boxes_with_persons(boxes_all):
+    boxes_persons = []
+    for i in range(len(boxes_all)):
+        person = boxes_all[i]
+        if tensor_row_is_person(person):
+            boxes_persons.append(person)
+    return boxes_persons
 
 #   TODO this function is too big
 # TODO write docs for this function
@@ -72,10 +97,3 @@ def parse_through_video_for_cropped_objects(cap=None):
 
         os.chdir("..")
         FRAME_NUM += 1
-
-os.chdir("frames")
-for file in os.listdir():
-    if file[0:6] == "person" and file[-4:] == ".png":
-        os.remove(file)
-
-
