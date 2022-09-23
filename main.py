@@ -7,4 +7,6 @@ cap = cv2.VideoCapture(video_filename)
 # RUN IF YOU WANT TO GET THE FRAME OBJECTS
 # parse_through_video_for_cropped_objects(cap)
 
+# creates a mask?
+
 

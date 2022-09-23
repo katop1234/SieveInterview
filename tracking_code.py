@@ -5,9 +5,9 @@ from helpers import *
 # Create tracker object
 tracker = EuclideanDistTracker()
 
+# initialize
+all_boxes_ids = []
 cap = cv2.VideoCapture(get_video_filename())
-
-# Object detection from Stable camera
 model = get_yolo_model()
 
 while True:
@@ -24,11 +24,11 @@ while True:
     detections = get_boxes_with_persons(boxes_all) # keeps only boxes with people
     detections = [person.tolist() for person in detections] # converts from tensor to float bc it's nicer
     detections = [person[0:4] for person in detections]
-    detections = get_pixel_values_for_detections(detections, height, width) # cleans up input
+    detections = get_pixel_values_for_detections(detections, height, width) # cleans up detections
 
     # 2. Object Tracking
     boxes_ids = tracker.update(detections)
-
+    all_boxes_ids.append(boxes_ids)
     for box_id in boxes_ids:
         x, y, w, h, id = box_id
         cv2.putText(roi, str(id), (x, y - 15), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 2)

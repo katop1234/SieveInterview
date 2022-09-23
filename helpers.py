@@ -1,7 +1,9 @@
 import torch
 import psutil
 import shutil
+import random
 import cv2
+from glob import glob
 import os
 import matplotlib.pyplot as plt
 
@@ -97,3 +99,11 @@ def parse_through_video_for_cropped_objects(cap=None):
 
         os.chdir("..")
         FRAME_NUM += 1
+
+def get_n_random_frames(n=1000):
+    PATH = "/home/katop/Desktop/SieveInterview/"
+    os.chdir(PATH + "frames/")
+    result = [y for x in os.walk(PATH) for y in
+              glob(os.path.join(x[0], '*.png'))]
+    os.chdir(PATH)
+    return random.sample(result, n)
