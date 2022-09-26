@@ -2,6 +2,7 @@
 from keras.preprocessing.image import load_img
 from keras.preprocessing.image import img_to_array
 from keras.applications.vgg16 import preprocess_input
+import tensorflow
 
 # models
 from keras.applications.vgg16 import VGG16
@@ -30,7 +31,6 @@ PERSONS = get_n_random_frames(100)
 model = VGG16()
 model = Model(inputs=model.inputs, outputs=model.layers[-2].output)
 
-
 def extract_features(file, model):
     # load the image as a 224x224 array
     img = load_img(file, target_size=(224, 224))
@@ -44,9 +44,8 @@ def extract_features(file, model):
     features = model.predict(imgx, use_multiprocessing=True)
     return features
 
-
 data = {}
-p = r"CHANGE TO A LOCATION TO SAVE FEATURE VECTORS"
+p = os.getcwd() + "features/"
 
 # lop through each image in the dataset
 for flower in PERSONS:
@@ -69,9 +68,8 @@ feat = np.array(list(data.values()))
 feat = feat.reshape(-1, 4096)
 
 # get the unique labels (from the flower_labels.csv)
-df = pd.read_csv('flower_labels.csv')
-label = df['label'].tolist()
-unique_labels = list(set(label))
+labels = ["blue_player", "red_player", "referee", "other"]
+unique_labels = set(labels)
 
 # reduce the amount of dimensions in the feature vector
 pca = PCA(n_components=100, random_state=22)
