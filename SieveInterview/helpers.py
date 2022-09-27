@@ -5,6 +5,7 @@ import random
 import cv2
 from glob import glob
 import pickle
+import numpy as np
 import os
 import matplotlib.pyplot as plt
 
@@ -184,4 +185,45 @@ def get_frames_of_video(video_filename):
     return frame_count
 
 kmeans_centers = read_obj("kmeans.centers")
-print(kmeans_centers)
+
+def get_center_of_centers(l):
+    output = []
+    coord = 0
+    for j in range(len(l[0])):
+        for i in range(len(l)):
+            cluster = l[i]
+            cluster_coord = cluster[j]
+            coord += cluster_coord
+        output.append(coord / len(l))
+        coord = 0
+
+    return output
+
+def sq_dist_between_two_vectors(a, b):
+    if len(a) != len(b):
+        print("WARNING: GOT VECTORS OF DIFFERENT LENGTH")
+    val = 0
+    for i in range(min(len(a), len(b))):
+        val += (a[i] - b[i]) ** 2
+    if len(a) < len(b):
+        val += sum([b[i]**2 for i in range(len(a), len(b))])
+    else:
+        val += sum([a[i] ** 2 for i in range(len(b), len(a))])
+    return val
+
+def get_variance_of_clusters(l):
+    center_point = get_center_of_centers(l)
+    var = 0
+    for cluster_center in l:
+        var += sq_dist_between_two_vectors(center_point, cluster_center)
+    return var
+
+vars = []
+for i in range(len(kmeans_centers) - 1):
+    for j in range(i+1, len(kmeans_centers)):
+        var = sq_dist_between_two_vectors(kmeans_centers[i], kmeans_centers[j])
+        vars.append(var)
+
+kmeans_centers = read_obj("kmeans.centers")
+print(sq_dist_between_two_vectors(kmeans_centers[5], read_obj("refs.center")))
+

@@ -30,7 +30,7 @@ os.chdir(PATH)
 # parse_through_video_for_cropped_objects(video_filename=get_video_filename(), num_frames_to_keep=1000)
 
 # this list holds all the image filename
-PERSONS = get_n_random_boxes(1000)
+PERSONS = get_n_random_boxes(2000)
 print("USING", len(PERSONS), "BOXES")
 
 model = VGG16()
@@ -83,7 +83,7 @@ labels = [i for i in range(20)] # keeping 20 for now then manually sorting the l
 unique_labels = list(set(labels))
 
 # reduce the amount of dimensions in the feature vector
-pca = PCA(n_components=20, random_state=22)
+pca = PCA(n_components=100, random_state=22)
 pca.fit(feat)
 pca_predictive_powers = pca.explained_variance_ratio_
 print("PCA PREDICTS THIS MUCH VARIATION", sum(pca_predictive_powers), pca_predictive_powers)
