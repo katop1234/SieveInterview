@@ -1,6 +1,7 @@
 # for loading/processing the images
 from tensorflow.keras.preprocessing.image import load_img
 from tensorflow.keras.preprocessing.image import img_to_array
+from tensorflow.keras.applications.vgg16 import decode_predictions
 from keras.applications.vgg16 import preprocess_input
 
 # models
@@ -25,13 +26,17 @@ from helpers import *
 PATH = home_dir()
 os.chdir(PATH)
 
+# USE THIS TO GENERATE RANDOM FRAMES IN THE FRAMES FOLDER
+# parse_through_video_for_cropped_objects(video_filename=get_video_filename(), num_frames_to_keep=1000)
+
 # this list holds all the image filename
-PERSONS = get_n_random_frames(-1)
-print("USING", len(PERSONS), "FILES")
+PERSONS = get_n_random_boxes(1000)
+print("USING", len(PERSONS), "BOXES")
 
 model = VGG16()
-model = Model(inputs=model.inputs, outputs=model.layers[-2].output)
+model = Model(inputs=model.inputs, outputs=model.layers[-2].output) # todo i think i should uncomment this for the embedding
 
+# todo idk if vgg is good, switch to yolo actually
 def extract_features(file, model):
     # load the image as a 224x224 array
     img = load_img(file, target_size=(224, 224))
@@ -45,14 +50,17 @@ def extract_features(file, model):
     features = model.predict(imgx, use_multiprocessing=True)
     return features
 
-
 data = {}
 output_folder = PATH + "output/"
-clear_folder(output_folder)
 
-# lop through each image in the dataset
-for person in PERSONS:
+# loop through each image in the dataset
+for count, person in enumerate(PERSONS):
     # try to extract the features and update the dictionary
+    feat = extract_features(person, model) # todo uncomment
+    data[person] = feat
+    if count % 50 == 0:
+        print(str(100 * count / len(PERSONS)) + "% done with feature extraction")
+    continue
     try:
         feat = extract_features(person, model)
         data[person] = feat
@@ -67,16 +75,18 @@ filenames = np.array(list(data.keys()))
 # get a list of just the features
 feat = np.array(list(data.values()))
 
-# reshape so that there are 210 samples of 4096 vectors
+# reshape so that there are n samples of 4096 vectors
 feat = feat.reshape(-1, 4096)
 
 # get the unique labels
-labels = ["blue_players", "red_players", "referees", "other"]
+labels = [i for i in range(20)] # keeping 20 for now then manually sorting the labels within subclasses
 unique_labels = list(set(labels))
 
 # reduce the amount of dimensions in the feature vector
-pca = PCA(n_components=100, random_state=22)
+pca = PCA(n_components=20, random_state=22)
 pca.fit(feat)
+pca_predictive_powers = pca.explained_variance_ratio_
+print("PCA PREDICTS THIS MUCH VARIATION", sum(pca_predictive_powers), pca_predictive_powers)
 x = pca.transform(feat)
 
 # cluster feature vectors
@@ -86,21 +96,19 @@ kmeans.fit(x)
 # holds the cluster id and the images { id: [images] }
 groups = {}
 for file, cluster in zip(filenames, kmeans.labels_):
-    if cluster not in groups.keys():
+    if cluster not in groups:
         groups[cluster] = []
-        groups[cluster].append(file)
-    else:
-        groups[cluster].append(file)
+    groups[cluster].append(file)
 
 # function that lets you view a cluster (based on identifier)
 def view_cluster(cluster):
     plt.figure(figsize=(25, 25));
     # gets the list of filenames for a cluster
     files = groups[cluster]
-    # only allow up to 30 images to be shown at a time
-    if len(files) > 30:
-        print(f"Clipping cluster size from {len(files)} to 30")
-        files = files[:29]
+
+    if len(files) > 100:
+        files = files[:100]
+        print("Limited images shown to 100 in view_cluster function")
     # plot each image in the cluster
     for index, file in enumerate(files):
         plt.subplot(10, 10, index + 1);
@@ -109,22 +117,37 @@ def view_cluster(cluster):
         plt.imshow(img)
         plt.axis('off')
 
-# this is just incase you want to see which value for k might be the best
-sse = []
-list_k = list(range(3, 50))
+# # this is just incase you want to see which value for k might be the best
+# sse = []
+# list_k = list(range(3, 50))
+#
+# for k in list_k:
+#     km = KMeans(n_clusters=k, random_state=22)
+#     km.fit(x)
+#     sse.append(km.inertia_)
 
-for k in list_k:
-    km = KMeans(n_clusters=k, random_state=22)
-    km.fit(x)
-    sse.append(km.inertia_)
+clear_folder(output_folder)
+print("GROUPS ARE", groups)
+kmeans_centers = kmeans.cluster_centers_
+print("K_means centers are", kmeans_centers)
+write_obj(kmeans_centers, "kmeans.centers")
 
+for group in groups:
+    random.shuffle(groups[group]) # makes sure each subcluster has a uniform distribution
+    group_folder = output_folder + str(group)
+    os.mkdir(group_folder)
+    for count, frame in enumerate(groups[group]):
+        shutil.copyfile(frame, group_folder + "/" + str(count))
 
-
-# Plot sse against k
-plt.figure(figsize=(6, 6))
-plt.plot(list_k, sse)
-plt.xlabel(r'Number of clusters *k*')
-plt.ylabel('Sum of squared distance');
-plt.show()
+get_output_folder(groups)
 
 play_sound()
+plt.show()
+
+# # Plot sse against k
+# plt.figure(figsize=(6, 6))
+# plt.plot(list_k, sse)
+# plt.xlabel(r'Number of clusters *k*')
+# plt.ylabel('Sum of squared distance');
+
+

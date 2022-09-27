@@ -5,6 +5,12 @@ from helpers import *
 # Create tracker object
 tracker = EuclideanDistTracker()
 
+# CODE TO GET BOUNDING BOXES
+# for (x, y, w, h) in faces:
+#     img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255,   0), 3)
+# # displaying image with bounding box
+# cv2.imshow('face_detect', img)
+
 # initialize
 all_boxes_ids = []
 cap = cv2.VideoCapture(get_video_filename())
@@ -14,7 +20,7 @@ while True:
     ret, frame = cap.read()
 
     # Extract Region of interest
-    roi = frame[200: 1280, 0: -1] # defines a region of interest (i chose the lower half of the frame because it has what we want)
+    roi = frame[150: 1280, 0: -1] # defines a region of interest (i chose the lower half of the frame because it has what we want)
     height, width, _ = roi.shape
 
     # 1. Object Detection

@@ -22,3 +22,10 @@ the model at each frame with that.
 # distance to each of the desired categories, and pick the top n of each to
 # classify as being the that type. also have a way to store the objects in a
 # json for each frame, should be given to you in the setup for the models.2
+
+
+### now that the clustering seems to work decently well, run it again on each of the clusters and find subclusters for them to segment out overlapping classifications
+0. is all referees (GOOD!)
+1. a mix but mostly blue players with a lot of the dark blue coach (filter this guy out)
+2. mostly white players but also dark blue coach (can be filtered out also)
+3. the worst... evenly split amongst blue and white players tbh. subcluster this into 2 and we should be good to go!
