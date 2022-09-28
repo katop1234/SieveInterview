@@ -2,12 +2,25 @@ import torch
 import psutil
 import shutil
 import random
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import torch
+from random import randint
+import pandas as pd
+import pickle
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
 import cv2
 from glob import glob
 import pickle
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+
+
+
+
 
 def get_video_filename():
     # todo you may have to change this for the deliverable
@@ -224,6 +237,28 @@ for i in range(len(kmeans_centers) - 1):
         var = sq_dist_between_two_vectors(kmeans_centers[i], kmeans_centers[j])
         vars.append(var)
 
-kmeans_centers = read_obj("kmeans.centers")
-print(sq_dist_between_two_vectors(kmeans_centers[5], read_obj("refs.center")))
+def get_cnn_model():
+    return read_obj("vgg.model")
+
+def extract_features(file, model):
+    from keras.applications.vgg16 import preprocess_input
+    from tensorflow.keras.preprocessing.image import load_img
+
+    # load the image as a 224x224 array
+    img = load_img(file, target_size=(224, 224))
+    # convert from 'PIL.Image.Image' to numpy array
+    img = np.array(img)
+    # reshape the data for the model reshape(num_of_samples, dim 1, dim 2, channels)
+    reshaped_img = img.reshape(1, 224, 224, 3)
+    # prepare image for model
+    imgx = preprocess_input(reshaped_img)
+    # get the feature vector
+    features = model.predict(imgx, use_multiprocessing=True)
+    return features
+
+def get_vector(box_file_path):
+    features = extract_features(box_file_path, get_cnn_model())
+    pca = read_obj("fit.pca")
+    print("lenfht of features for pca[0]", len(features[0]))
+    return pca.transform(features)[0]
 

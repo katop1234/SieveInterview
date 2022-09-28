@@ -1,25 +1,7 @@
-# for loading/processing the images
-from tensorflow.keras.preprocessing.image import load_img
-from tensorflow.keras.preprocessing.image import img_to_array
 from tensorflow.keras.applications.vgg16 import decode_predictions
-from keras.applications.vgg16 import preprocess_input
-
-# models
 from keras.applications.vgg16 import VGG16
+from tensorflow.keras.preprocessing.image import img_to_array
 from keras.models import Model
-import torch
-
-# clustering and dimension reduction
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-
-# for everything else
-import os
-import numpy as np
-import matplotlib.pyplot as plt
-from random import randint
-import pandas as pd
-import pickle
 from helpers import *
 
 # Set home directory
@@ -34,21 +16,9 @@ PERSONS = get_n_random_boxes(2000)
 print("USING", len(PERSONS), "BOXES")
 
 model = VGG16()
-model = Model(inputs=model.inputs, outputs=model.layers[-2].output) # todo i think i should uncomment this for the embedding
+model = Model(inputs=model.inputs,
+              outputs=model.layers[-2].output)  # todo i think i should uncomment this for the embedding
 
-# todo idk if vgg is good, switch to yolo actually
-def extract_features(file, model):
-    # load the image as a 224x224 array
-    img = load_img(file, target_size=(224, 224))
-    # convert from 'PIL.Image.Image' to numpy array
-    img = np.array(img)
-    # reshape the data for the model reshape(num_of_samples, dim 1, dim 2, channels)
-    reshaped_img = img.reshape(1, 224, 224, 3)
-    # prepare image for model
-    imgx = preprocess_input(reshaped_img)
-    # get the feature vector
-    features = model.predict(imgx, use_multiprocessing=True)
-    return features
 
 data = {}
 output_folder = PATH + "output/"
@@ -78,6 +48,8 @@ feat = np.array(list(data.values()))
 # reshape so that there are n samples of 4096 vectors
 feat = feat.reshape(-1, 4096)
 
+
+# todo what are the dims of feat
 # get the unique labels
 labels = [i for i in range(20)] # keeping 20 for now then manually sorting the labels within subclasses
 unique_labels = list(set(labels))
@@ -85,6 +57,9 @@ unique_labels = list(set(labels))
 # reduce the amount of dimensions in the feature vector
 pca = PCA(n_components=100, random_state=22)
 pca.fit(feat)
+
+write_obj(pca, "fit.pca")
+
 pca_predictive_powers = pca.explained_variance_ratio_
 print("PCA PREDICTS THIS MUCH VARIATION", sum(pca_predictive_powers), pca_predictive_powers)
 x = pca.transform(feat)
