@@ -11,21 +11,9 @@ desired frames and see what embeddings they generate.
 4. add functionality to do the above, and then get the relevant json / labels of
 the model at each frame with that.
 
-### copied from my main.py file to make it cleaner
-# have a helper function that can pull up the person object's frame for a target
-# frame to make manual classification easier.
+### ONLY TO DO
+find the best center vector for each class. assign negative weights for other
+clusters the k means cluster detects (like the dakr blue shirt) to improve
+performance. this will be tedious and likely require looking over many different
+frames and find the optimal threshold that way.
 
-# manually parse through some of the frames for each desired category and get
-# their embedding. store these somewhere as reference
-
-# go through each person objects recognized and calculate the sum euclidean
-# distance to each of the desired categories, and pick the top n of each to
-# classify as being the that type. also have a way to store the objects in a
-# json for each frame, should be given to you in the setup for the models.2
-
-
-### now that the clustering seems to work decently well, run it again on each of the clusters and find subclusters for them to segment out overlapping classifications
-0. is all referees (GOOD!)
-1. a mix but mostly blue players with a lot of the dark blue coach (filter this guy out)
-2. mostly white players but also dark blue coach (can be filtered out also)
-3. the worst... evenly split amongst blue and white players tbh. subcluster this into 2 and we should be good to go!
