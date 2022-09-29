@@ -17,10 +17,8 @@ import pickle
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-
-
-
-
+from keras.applications.vgg16 import VGG16
+from keras.models import Model
 
 def get_video_filename():
     # todo you may have to change this for the deliverable
@@ -40,6 +38,11 @@ def read_obj(file_name):
     file = open(file_path, "rb")
     obj = pickle.load(file)
     return obj
+
+# So i don't have to run this multiple times
+ref_vector = read_obj("refs.center")
+white_vector = read_obj("whites.center")
+blue_vector = read_obj("blues.center")
 
 def write_obj(obj, file_name):
     file_path = home_dir() + "serialized/" + file_name
@@ -213,8 +216,6 @@ def get_center_of_centers(l):
     return output
 
 def sq_dist_between_two_vectors(a, b):
-    if len(a) != len(b):
-        print("WARNING: GOT VECTORS OF DIFFERENT LENGTH")
     val = 0
     for i in range(min(len(a), len(b))):
         val += (a[i] - b[i]) ** 2
@@ -231,14 +232,12 @@ def get_variance_of_clusters(l):
         var += sq_dist_between_two_vectors(center_point, cluster_center)
     return var
 
-vars = []
-for i in range(len(kmeans_centers) - 1):
-    for j in range(i+1, len(kmeans_centers)):
-        var = sq_dist_between_two_vectors(kmeans_centers[i], kmeans_centers[j])
-        vars.append(var)
+model = VGG16()
+model = Model(inputs=model.inputs,
+              outputs=model.layers[-2].output)
 
 def get_cnn_model():
-    return read_obj("vgg.model")
+    return model
 
 def extract_features(file, model):
     from keras.applications.vgg16 import preprocess_input
@@ -259,6 +258,86 @@ def extract_features(file, model):
 def get_vector(box_file_path):
     features = extract_features(box_file_path, get_cnn_model())
     pca = read_obj("fit.pca")
-    print("lenfht of features for pca[0]", len(features[0]))
-    return pca.transform(features)[0]
+    img_to_dim_reduced_vector = pca.transform(features)[0]
+    return img_to_dim_reduced_vector
+
+def get_vector_from_array(arr):
+    cv2.imwrite(home_dir() + "serialized/" + 'temp.png',
+                arr)  # todo use for debugging to see the cropped image
+    return get_vector(home_dir() + "serialized/" + 'temp.png')
+
+def get_likelihoods_of_person_type(id, arr):
+    vector = get_vector_from_array(arr)
+
+    white_val = sq_dist_between_two_vectors(vector, white_vector)
+    blue_val = sq_dist_between_two_vectors(vector, blue_vector)
+    ref_val = sq_dist_between_two_vectors(vector, ref_vector)
+
+    likelihoods = {"white": white_val,
+                   "blue": blue_val,
+                    "ref": ref_val,
+                   "id": id}
+    return likelihoods
+
+def get_predicted_type_for_each_id(seen, id_to_likelihood):
+    print("ID TO LIKELIHOOD")
+    print(id_to_likelihood)
+    MAX_BLUE = 5
+    MAX_WHITE = 5
+    predictions = {"id": "type"}
+
+    # if we know the type from previous frame
+    for detection in id_to_likelihood:
+        id = detection["id"]
+        if id in seen:
+            predictions[id] = seen[id]
+            continue
+
+    # check if ref
+    for detection in id_to_likelihood:
+        # TODO i set this threshold through trial and error
+        id = detection["id"]
+        if detection["ref"] < 2700 and id not in predictions:
+            predictions[id] = "ref"
+
+    # check if blue
+    count = 1
+    id_to_likelihood.sort(key = lambda x: x["blue"])
+    for detection in id_to_likelihood:
+        if count > MAX_BLUE:
+            break
+
+        # TODO i set this threshold through trial and error
+        id = detection["id"]
+        if detection["blue"] < 3800 and id not in predictions:
+            predictions[id] = "blue"
+
+        count += 1
+
+    # check if white
+    count = 1
+    id_to_likelihood.sort(key=lambda x: x["white"])
+    for detection in id_to_likelihood:
+        if count > MAX_WHITE:
+            break
+
+        # TODO i set this threshold through trial and error
+        id = detection["id"]
+        if detection["white"] < 3600 and id not in predictions:
+            predictions[id] = "white"
+
+        count += 1
+
+    print("PREDICTIONS BEFORE ASSINGING TO OTHER", "len predictions", len(predictions), "len seen", len(seen))
+    print(predictions, "xxx")
+    # assign remaining to other
+    for detection in id_to_likelihood:
+        other_id = detection["id"]
+        if other_id not in predictions:
+            predictions[other_id] = "other"
+
+    return predictions
+
+
+
 

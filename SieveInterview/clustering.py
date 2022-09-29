@@ -55,7 +55,7 @@ labels = [i for i in range(20)] # keeping 20 for now then manually sorting the l
 unique_labels = list(set(labels))
 
 # reduce the amount of dimensions in the feature vector
-pca = PCA(n_components=100, random_state=22)
+pca = PCA(n_components=100, random_state=22) # use 100, kinda overkill but can't hurt.
 pca.fit(feat)
 
 write_obj(pca, "fit.pca")
