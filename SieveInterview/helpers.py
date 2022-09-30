@@ -3,6 +3,8 @@ import psutil
 import shutil
 import random
 import os
+from keras.applications.vgg16 import preprocess_input
+from tensorflow.keras.preprocessing.image import load_img
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -38,11 +40,6 @@ def read_obj(file_name):
     file = open(file_path, "rb")
     obj = pickle.load(file)
     return obj
-
-# So i don't have to run this multiple times
-ref_vector = read_obj("refs.center")
-white_vector = read_obj("whites.center")
-blue_vector = read_obj("blues.center")
 
 def write_obj(obj, file_name):
     file_path = home_dir() + "serialized/" + file_name
@@ -232,18 +229,19 @@ def get_variance_of_clusters(l):
         var += sq_dist_between_two_vectors(center_point, cluster_center)
     return var
 
+# todo uncomment
 model = VGG16()
-model = Model(inputs=model.inputs,
-              outputs=model.layers[-2].output)
+model = Model(inputs=model.inputs, outputs=model.layers[-2].output)
 
 def get_cnn_model():
     return model
 
-def extract_features(file, model):
-    from keras.applications.vgg16 import preprocess_input
-    from tensorflow.keras.preprocessing.image import load_img
+import time
 
+
+def extract_features(file, model):
     # load the image as a 224x224 array
+    start = time.time()
     img = load_img(file, target_size=(224, 224))
     # convert from 'PIL.Image.Image' to numpy array
     img = np.array(img)
@@ -253,6 +251,8 @@ def extract_features(file, model):
     imgx = preprocess_input(reshaped_img)
     # get the feature vector
     features = model.predict(imgx, use_multiprocessing=True)
+    end = time.time()
+    # print("EXTRACTING FEATURES TOOK", end - start)
     return features
 
 def get_vector(box_file_path):
@@ -266,12 +266,34 @@ def get_vector_from_array(arr):
                 arr)  # todo use for debugging to see the cropped image
     return get_vector(home_dir() + "serialized/" + 'temp.png')
 
+white_vector = read_obj("whites.center")
+blue_vector = read_obj("blues.center")
+ref_center0 = read_obj("ref.center0")
+ref_center1 = read_obj("ref.center1")
+ref_center2 = read_obj("ref.center2")
+ref_center3 = read_obj("ref.center3")
+
+# because i found many good clusters
+def get_ref_val(vector):
+    return min(
+        sq_dist_between_two_vectors(vector, ref_center0),
+        sq_dist_between_two_vectors(vector, ref_center1),
+    sq_dist_between_two_vectors(vector, ref_center2),
+    sq_dist_between_two_vectors(vector, ref_center3)
+    )
+
+def get_blue_val(vector):
+    return sq_dist_between_two_vectors(vector, blue_vector)
+
+def get_white_val(vector):
+    return sq_dist_between_two_vectors(vector, white_vector)
+
 def get_likelihoods_of_person_type(id, arr):
     vector = get_vector_from_array(arr)
 
-    white_val = sq_dist_between_two_vectors(vector, white_vector)
-    blue_val = sq_dist_between_two_vectors(vector, blue_vector)
-    ref_val = sq_dist_between_two_vectors(vector, ref_vector)
+    white_val = get_white_val(vector)
+    blue_val = get_blue_val(vector)
+    ref_val = get_ref_val(vector)
 
     likelihoods = {"white": white_val,
                    "blue": blue_val,
@@ -281,6 +303,7 @@ def get_likelihoods_of_person_type(id, arr):
 
 def get_predicted_type_for_each_id(seen, id_to_likelihood):
     print("ID TO LIKELIHOOD")
+    id_to_likelihood.sort(key=lambda x: x["id"])
     print(id_to_likelihood)
     MAX_BLUE = 5
     MAX_WHITE = 5
@@ -293,13 +316,6 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
             predictions[id] = seen[id]
             continue
 
-    # check if ref
-    for detection in id_to_likelihood:
-        # TODO i set this threshold through trial and error
-        id = detection["id"]
-        if detection["ref"] < 2700 and id not in predictions:
-            predictions[id] = "ref"
-
     # check if blue
     count = 1
     id_to_likelihood.sort(key = lambda x: x["blue"])
@@ -307,12 +323,19 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
         if count > MAX_BLUE:
             break
 
-        # TODO i set this threshold through trial and error
         id = detection["id"]
-        if detection["blue"] < 3800 and id not in predictions:
-            predictions[id] = "blue"
+        if id not in predictions: # todo set threshold
+            if detection["blue"] < 2500 and detection["blue"] < detection["ref"] and detection["blue"] < detection["white"]:
+                predictions[id] = "blue"
 
         count += 1
+
+    # check if ref
+    for detection in id_to_likelihood:
+        id = detection["id"]
+        if id not in predictions:
+            if detection["ref"] < 2800 and detection["ref"] < detection["white"]:
+                predictions[id] = "ref"
 
     # check if white
     count = 1
@@ -323,8 +346,9 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
 
         # TODO i set this threshold through trial and error
         id = detection["id"]
-        if detection["white"] < 3600 and id not in predictions:
-            predictions[id] = "white"
+        if id not in predictions:  # todo set threshold
+            if detection["white"] < 2500 and detection["white"] < detection["ref"] and detection["white"] < detection["blue"]:
+                predictions[id] = "white"
 
         count += 1
 

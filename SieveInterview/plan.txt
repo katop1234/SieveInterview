@@ -17,3 +17,28 @@ clusters the k means cluster detects (like the dakr blue shirt) to improve
 performance. this will be tedious and likely require looking over many different
 frames and find the optimal threshold that way.
 
+notes on output:
+0 - mixed
+1 - white players in audience
+2 - audience
+3 - dark / light blue in audience
+4 - mixed
+5 - mixed or more blue
+6 - trash
+7 - mixed
+8 - BLUE
+9 - dark blue in audience
+10 - REFS
+11 - light blue in audience
+12 - WHITE
+13 - mixed
+14 - mixed but more white
+15 - REFS
+16 - trash
+17 - audience / trash
+18 - REFS but not as good
+19 - REFS but not as good also
+
+9/29 --
+sheesh, the k means classifier failed miserably. Moving to a mask solution that i listed in my original proposal
+in the home stretch!

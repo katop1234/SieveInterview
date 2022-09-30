@@ -15,29 +15,20 @@ os.chdir(PATH)
 PERSONS = get_n_random_boxes(2000)
 print("USING", len(PERSONS), "BOXES")
 
+# CNN model that outputs the embedding for an image
 model = VGG16()
 model = Model(inputs=model.inputs,
-              outputs=model.layers[-2].output)  # todo i think i should uncomment this for the embedding
-
+              outputs=model.layers[-2].output)
 
 data = {}
 output_folder = PATH + "output/"
 
-# loop through each image in the dataset
+# loop through each image in the dataset and assign the embedding to the filename in data
 for count, person in enumerate(PERSONS):
-    # try to extract the features and update the dictionary
-    feat = extract_features(person, model) # todo uncomment
+    feat = extract_features(person, model)
     data[person] = feat
     if count % 50 == 0:
         print(str(100 * count / len(PERSONS)) + "% done with feature extraction")
-    continue
-    try:
-        feat = extract_features(person, model)
-        data[person] = feat
-    # if something fails, save the extracted features as a pickle file (optional)
-    except:
-        with open(output_folder, 'wb') as file:
-            pickle.dump(data, file)
 
 # get a list of the filenames
 filenames = np.array(list(data.keys()))
@@ -46,10 +37,8 @@ filenames = np.array(list(data.keys()))
 feat = np.array(list(data.values()))
 
 # reshape so that there are n samples of 4096 vectors
-feat = feat.reshape(-1, 4096)
+feat = feat.reshape(-1, 4096) # todo what is this dims, is it optimal for my pca?
 
-
-# todo what are the dims of feat
 # get the unique labels
 labels = [i for i in range(20)] # keeping 20 for now then manually sorting the labels within subclasses
 unique_labels = list(set(labels))
@@ -101,14 +90,17 @@ def view_cluster(cluster):
 #     km.fit(x)
 #     sse.append(km.inertia_)
 
+# Stores serialized objects for groups and kmeans_centers
 clear_folder(output_folder)
 print("GROUPS ARE", groups)
+write_obj(groups, "kmeans.groups")
 kmeans_centers = kmeans.cluster_centers_
 print("K_means centers are", kmeans_centers)
 write_obj(kmeans_centers, "kmeans.centers")
 
+# In output_folder, see the images in each group
 for group in groups:
-    random.shuffle(groups[group]) # makes sure each subcluster has a uniform distribution
+    random.shuffle(groups[group]) # makes sure each subcluster is uniform
     group_folder = output_folder + str(group)
     os.mkdir(group_folder)
     for count, frame in enumerate(groups[group]):
