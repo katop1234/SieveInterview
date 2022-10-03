@@ -1,5 +1,6 @@
 import math
 
+'''Creates tracker object that allows for tracking across frames'''
 
 class EuclideanDistTracker:
     def __init__(self):

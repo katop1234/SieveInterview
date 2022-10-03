@@ -21,18 +21,13 @@ import pickle
 import numpy as np
 import os
 
-def get_video_filename():
-    # todo you may have to change this for the deliverable
-    return "/home/katop/Desktop/1678_3566_final_four.webm.mp4"
+PATH = os.getcwd()
 
 def home_dir():
-    PATH = "/home/katop/Desktop/SieveInterview/"
-    return PATH
-def get_test_video_filename():
-    # todo you may have to change this for the deliverable
-    return "/home/katop/Desktop/5sec.mp4"
+    return PATH + "/"
 
-# Model
+def get_video_filename():
+    return home_dir() + "1678_3566_final_four.webm.mp4"
 
 def read_obj(file_name):
     '''reads a file in the serialized/ folder'''
@@ -85,14 +80,11 @@ def get_boxes_with_persons(boxes_all):
         if tensor_row_is_person(person):
             boxes_persons.append(person)
     return boxes_persons
-
-#   TODO this function is too big
-# TODO write docs for this function
 def parse_through_video_for_cropped_objects(video_filename, num_frames_to_keep = -1):
     '''Use this function for model tuning. Basically goes through the video and
     any time yolo detects a person, it stores the box in a specified folder. Helpful for
     debugging and seeing what the persons look like'''
-    frames_folder_path = home_dir() + "frames/"
+    frames_folder_path = home_dir() + "boxes/"
     clear_folder(frames_folder_path)
     os.chdir(frames_folder_path)
 
@@ -160,10 +152,11 @@ def parse_through_video_for_cropped_objects(video_filename, num_frames_to_keep =
         FRAME_NUM += 1
 
 def get_n_random_boxes(n=1000):
-    '''Use for parse_through_video_for_cropped_objects function.
-    Basically goes through all the boxes stored by that function and returns a random n of them'''
+    '''Use after parse_through_video_for_cropped_objects function.
+    Basically goes through all the boxes stored by that function and returns a list
+    of n randomly sampled from them'''
     PATH = home_dir()
-    os.chdir(PATH + "frames/")
+    os.chdir(PATH + "boxes/")
     result = [y for x in os.walk(PATH) for y in
               glob(os.path.join(x[0], '*.png'))]
     os.chdir(PATH)
@@ -177,7 +170,7 @@ def get_parent_dir(yourpath):
     return os.path.abspath(os.path.join(yourpath, os.pardir))
 
 def play_sound(secs=3):
-    '''if i want to do something else whiel the code is running'''
+    '''if i want to do something else while the code is running'''
     duration = secs  # seconds
     freq = 440  # Hz
     os.system('play -nq -t alsa synth {} sine {}'.format(duration, freq))
@@ -507,6 +500,29 @@ def show_masked(image_original, target_color):
 
     cv2.imshow("masked with " + str(color),  masked)
     return
+
+def crop_to_n_frames(n=10):
+    ''' crop video to n frames for testing purposes'''
+    cap = cv2.VideoCapture(get_video_filename())
+
+    frame_num = 0
+    while frame_num < 15:
+        ret, frame = cap.read()
+        cv2.imwrite(home_dir() + "video_frames/" + "frame" + str(frame_num) + ".png", frame)
+        frame_num += 1
+
+    img_array = []
+    for filename in glob(home_dir() + "video_frames/*.png"):
+        img = cv2.imread(filename)
+        height, width, layers = img.shape
+        size = (width, height)
+        img_array.append(img)
+
+    out = cv2.VideoWriter('cropped_video.avi', cv2.VideoWriter_fourcc(*'DIVX'), 15, size)
+
+    for i in range(len(img_array)):
+        out.write(img_array[i])
+    out.release()
 
 def write_to_json(python_dict, file_name="all_objects.json"):
     '''Writes python object to a json file'''

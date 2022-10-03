@@ -1,5 +1,11 @@
 from helpers import *
 
+'''
+Samples 2000 boxes randomly from yolo across the whole video
+and creates subfolders for each kmeans cluster with the box
+image files corresponding to that cluster
+'''
+
 # Set home directory
 PATH = home_dir()
 os.chdir(PATH)
@@ -18,7 +24,7 @@ model = Model(inputs=model.inputs,
               outputs=model.layers[-2].output)
 
 data = {}
-output_folder = PATH + "output/"
+output_folder = PATH + "kmeans_clusters/"
 
 # loop through each image in the dataset and assign the embedding to the filename in data
 for count, person in enumerate(PERSONS):

@@ -1,3 +1,5 @@
+'''Run random code here'''
+
 import torch
 def get_yolo_model():
     model = torch.hub.load('ultralytics/yolov5', 'yolov5s')  # or yolov5n - yolov5x6, custom

@@ -1,28 +1,12 @@
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-
 from helpers import read_obj, sq_dist_between_two_vectors,\
     get_vector, write_obj, get_ref_val, get_blue_val, get_white_val
 from sklearn.svm import SVC
 import os, time, numpy as np
-
+import cv2
 
 # masks!
-color_list=['white','black','blue']
-boundaries = [
-    [[215, 215, 215], [255, 255, 255]], # white
-    [[0, 0, 0], [85, 85, 85]], # black
-    [[3,169,240], [187,222,251]] # blue
-    ]
-
-for i in range(len(color_list)):
-    color = color_list[i]
-    lower = boundaries[i][0]
-    upper = boundaries[i][1]
-    mask = cv2.inRange(image, lower, upper)
-    output = cv2.bitwise_and(image, image, mask = mask)
-    crop_img = frame[ymin:ymax, xmin:xmax]
-
 
 exit(0)
 # SVM to classify each person
@@ -53,7 +37,7 @@ predictions = clf.predict(X_unknown)
 probs = clf.predict_proba(X_unknown)
 for i in range(len(predictions)):
     print(i, predictions[i], probs[i])
-exit(0)
+# exit(0)
 # todo the below was too crude and probably not wise. shifting to using SVM instead
 whites_vector = read_obj("whites.center")
 blues_vector = read_obj("blues.center")
