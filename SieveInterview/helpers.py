@@ -64,11 +64,11 @@ def get_pixel_values_for_detections(detections, height, width):
 
     new_detections = []
     for detection in detections:
-        x = int(detection[0] * width)
-        y = int(detection[1] * height)
-        w = int((detection[2] - detection[0]) * width)
-        h = int((detection[3] - detection[1]) * height)
-        new_detections.append([x, y, w, h])
+        x1 = int(detection[0] * width)
+        y1 = int(detection[1] * height)
+        x2 = int(detection[2] * width)
+        y2 = int(detection[3] * height)
+        new_detections.append([x1, y1, x2, y2])
 
     return new_detections
 
@@ -275,12 +275,12 @@ ref_center3 = read_obj("ref.center3")
 
 # because i found many good clusters
 def get_ref_val(vector):
-    return min(
+    return np.mean([
         sq_dist_between_two_vectors(vector, ref_center0),
         sq_dist_between_two_vectors(vector, ref_center1),
-    sq_dist_between_two_vectors(vector, ref_center2),
-    sq_dist_between_two_vectors(vector, ref_center3)
-    )
+        sq_dist_between_two_vectors(vector, ref_center2),
+        sq_dist_between_two_vectors(vector, ref_center3)
+                    ])
 
 def get_blue_val(vector):
     return sq_dist_between_two_vectors(vector, blue_vector)
@@ -294,17 +294,33 @@ def get_likelihoods_of_person_type(id, arr):
     white_val = get_white_val(vector)
     blue_val = get_blue_val(vector)
     ref_val = get_ref_val(vector)
+    white_percent = get_mask_percent(arr, "white")
+    blue_percent = get_mask_percent(arr, "blue")
+    floor_percent = get_mask_percent(arr, "floor")
 
     likelihoods = {"white": white_val,
                    "blue": blue_val,
                     "ref": ref_val,
+                   "white_percent": white_percent,
+                   "blue_percent": blue_percent,
+                   "floor_percent": floor_percent,
                    "id": id}
+    for key in likelihoods:
+        likelihoods[key] = round(likelihoods[key], 2)
     return likelihoods
 
 def get_predicted_type_for_each_id(seen, id_to_likelihood):
     print("ID TO LIKELIHOOD")
     id_to_likelihood.sort(key=lambda x: x["id"])
     print(id_to_likelihood)
+
+    BLUE_DIST_THRESHOLD = 3750
+    WHITE_DIST_THRESHOLD = 3750
+
+    BLUE_PERCENT_THRESHOLD = 5
+    WHITE_PERCENT_THRESHOLD = 15
+
+    FLOOR_THRESHOLD = 7.5
     MAX_BLUE = 5
     MAX_WHITE = 5
     predictions = {"id": "type"}
@@ -319,41 +335,44 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
     # check if blue
     count = 1
     id_to_likelihood.sort(key = lambda x: x["blue"])
+    print("blue candidates", id_to_likelihood[:5])
     for detection in id_to_likelihood:
         if count > MAX_BLUE:
             break
 
         id = detection["id"]
-        if id not in predictions: # todo set threshold
-            if detection["blue"] < 2500 and detection["blue"] < detection["ref"] and detection["blue"] < detection["white"]:
-                predictions[id] = "blue"
+        if id not in predictions:
+            if detection["blue"] < detection["ref"] and detection["blue"] < detection["white"]:
+                if detection["floor_percent"] > FLOOR_THRESHOLD and detection["blue"] < BLUE_DIST_THRESHOLD:
+                    if detection["blue_percent"] < BLUE_PERCENT_THRESHOLD:
+                        predictions[id] = "blue"
+                        count += 1
 
-        count += 1
+    # check if white
+    count = 1
+    id_to_likelihood.sort(key=lambda x: x["white"])
+    print("white candidates", id_to_likelihood[:5])
+    for detection in id_to_likelihood:
+        if count > MAX_WHITE:
+            break
+
+        id = detection["id"]
+        if id not in predictions:
+            if detection["white"] < detection["ref"] and detection["white"] < detection["blue"]:
+                if detection["floor_percent"] > FLOOR_THRESHOLD and detection["white"] < WHITE_DIST_THRESHOLD:
+                    if detection["white_percent"] < WHITE_PERCENT_THRESHOLD:
+                        predictions[id] = "white"
+                        count += 1
 
     # check if ref
     for detection in id_to_likelihood:
         id = detection["id"]
         if id not in predictions:
-            if detection["ref"] < 2800 and detection["ref"] < detection["white"]:
-                predictions[id] = "ref"
-
-    # check if white
-    count = 1
-    id_to_likelihood.sort(key=lambda x: x["white"])
-    for detection in id_to_likelihood:
-        if count > MAX_WHITE:
-            break
-
-        # TODO i set this threshold through trial and error
-        id = detection["id"]
-        if id not in predictions:  # todo set threshold
-            if detection["white"] < 2500 and detection["white"] < detection["ref"] and detection["white"] < detection["blue"]:
-                predictions[id] = "white"
-
-        count += 1
+            if detection["ref"] < detection["blue"] and detection["ref"] < detection["white"]:
+                if detection["ref"] < 3000: predictions[id] = "ref"
 
     print("PREDICTIONS BEFORE ASSINGING TO OTHER", "len predictions", len(predictions), "len seen", len(seen))
-    print(predictions, "xxx")
+    print(predictions)
     # assign remaining to other
     for detection in id_to_likelihood:
         other_id = detection["id"]
@@ -362,6 +381,54 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
 
     return predictions
 
+def get_color_ranges():
+    # this shit is in BGR not RGB
+    boundaries = {
+        "white" : [[160, 160, 160], [255, 255, 255]],
+        "black":  [[0, 0, 0], [85, 85, 85]],
+        "blue": [[100, 70, 30], [255, 150, 100]],
+        "floor-light": [[135, 165, 180], [195, 215, 235]],
+        "floor-dark": [[60, 120, 150], [90, 155, 180]]
+    }
+
+    return boundaries
+
+def color_list():
+    return list(get_color_ranges().keys())
+
+color_list = color_list()
+boundaries = get_color_ranges()
+
+def get_mask_percent(box, color):
+    if color == "floor":
+        return get_mask_percent(box, "floor-dark") + get_mask_percent(box, "floor-light")
+
+    lower = np.array(boundaries[color][0])
+    upper = np.array(boundaries[color][1])
+    mask = cv2.inRange(box, lower, upper)
+    masked = cv2.bitwise_and(box, box, mask=mask)
+
+    no_pixel_array = np.array([0, 0, 0])
+    count, total = 0, 0
+    for i in range(len(masked)):
+        for j in range(len(masked[i])):
+            total += 1
+            curr_pixel_array = masked[i][j]
+            if not np.array_equal(curr_pixel_array, no_pixel_array):
+                count += 1
+    return 100 * count / total
+
+def get_region_of_interest(frame):
+    return frame[200: 1280, 0: -1]  # defines a region of interest (i chose the lower half of the frame because it has what we want)
 
 
+def show_masked(image_original, target_color):
+    image = image_original.copy() # not sure if inRange or bitwise_and mutate the image
+    color = target_color
+    lower = np.array(boundaries[color][0])
+    upper = np.array(boundaries[color][1])
+    mask = cv2.inRange(image, lower, upper)
+    masked = cv2.bitwise_and(image, image, mask = mask)
 
+    cv2.imshow("masked with " + str(color),  masked)
+    return

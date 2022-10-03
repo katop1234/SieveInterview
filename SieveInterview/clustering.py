@@ -16,6 +16,7 @@ PERSONS = get_n_random_boxes(2000)
 print("USING", len(PERSONS), "BOXES")
 
 # CNN model that outputs the embedding for an image
+# https://machinelearningmastery.com/use-pre-trained-vgg-model-classify-objects-photographs/
 model = VGG16()
 model = Model(inputs=model.inputs,
               outputs=model.layers[-2].output)
