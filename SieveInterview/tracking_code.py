@@ -43,17 +43,18 @@ while True:
     ret, frame = cap.read()
 
     frame_info = {}
-    frame_info["frame number"] = FRAME_NUM
+    frame_info["frame_number"] = FRAME_NUM
     frame_info["objects"] = []
 
     # Extract Region of interest
-    roi = get_region_of_interest(frame)
+    # roi = get_region_of_interest(frame) # use this for debugging because it focuses on the court only not audience
+    roi = frame
     height, width, _ = roi.shape
 
     # 1. Object Detection
     results = model(roi)
     boxes_all = results.xyxyn[0]
-    detections = get_boxes_with_persons(boxes_all)  # keeps only boxes with people
+    detections = get_boxes_with_persons(boxes_all)
     detections = [person.tolist() for person in detections]  # converts from tensor to float bc it's nicer
     detections = [person[0:4] for person in detections] # person[4] just tells us object type
     detections = get_pixel_values_for_detections(detections, height, width)  # cleans up detections
@@ -70,16 +71,23 @@ while True:
 
     id_and_likelihoods = []
     print("------------------------------FRAME", FRAME_NUM, "------------------------------")
+    # Sort boxes by id
     boxes_ids.sort(key=lambda x:x[4])
+
     for box_id in boxes_ids:
         x1, y1, x2, y2, id = box_id
         cropped_image = roi[y1:y2, x1:x2]
 
+        # Store the box in detections/frame_number/
+        cv2.imwrite(str(id) + ".png", cropped_image)
+
+        # Get mask percents
         white_percent = get_mask_percent(cropped_image, "white")
         blue_percent = get_mask_percent(cropped_image, "blue")
         floor_percent = get_mask_percent(cropped_image, "floor")
         # print("id frame", id, FRAME_NUM, "white%", white_percent, "blue%", blue_percent, "floor%", floor_percent)
-        cv2.imwrite(str(id) + ".png", cropped_image)
+
+        # Get likelihoods of belonging to a class and add to list of current id's
         likelihoods = get_likelihoods_of_person_type(id, cropped_image)
         id_and_likelihoods.append(likelihoods)
 
@@ -93,28 +101,31 @@ while True:
 
         object_info = {}
         object_info["object_id"] = id
-        object_info["person_type"] = id_type
-        object_info["box_coordinates"] = (x1, y1, x2, y2)
+
+        object_info["person_type"] = get_submission_type(id_type)
+        object_info["box_coordinates"] = (x1, y1, x2 - x1, y2 - y1)
         frame_info["objects"].append(object_info)
 
         seen[id] = id_type
+
+    # Stores png of current frame
+    cv2.imwrite(home_dir() + "/frames_for_submission_video/" + "frame" + str(FRAME_NUM) + ".png", roi)
 
     # Show the frame
     # cv2.imshow("roi", roi)
     # show_masked(roi, "white")
 
-    # exit the video
-    # todo i changed this to pause, but delete the continue to EXIT
+    # Pause the video
     if cv2.waitKey(1) & 0xFF == ord('q') or ret == False:
         print("press q to unpause")
         while not (cv2.waitKey(1) & 0xFF == ord('q')):
             time.sleep(5)
         continue
 
+    # Saves likelihoods and relevant data in each frame folder for debugging
     text_file = open("id_and_likelihood.txt", "w")
     text_file.write(str(id_and_likelihoods))
     text_file.close()
-
     text_file = open("seen.txt", "w")
     text_file.write(str(seen))
     text_file.close()
@@ -127,9 +138,5 @@ while True:
 cap.release()
 cv2.destroyAllWindows()
 
-
-# todo
-def write_to_json():
-    return
-
+get_output_video()
 write_to_json(ALL_OBJECTS)

@@ -1,7 +1,3 @@
-from tensorflow.keras.applications.vgg16 import decode_predictions
-from keras.applications.vgg16 import VGG16
-from tensorflow.keras.preprocessing.image import img_to_array
-from keras.models import Model
 from helpers import *
 
 # Set home directory

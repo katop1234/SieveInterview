@@ -1,0 +1,12 @@
+# Required packages
+# They all go to helpers.py
+
+torch
+psutil
+keras
+tensorflow
+numpy
+matplotlib
+pandas
+scikit-learn
+opencv-python
