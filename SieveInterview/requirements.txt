@@ -10,3 +10,7 @@ matplotlib
 pandas
 scikit-learn
 opencv-python
+pyyaml
+torchvision
+tqdm
+seaborn
