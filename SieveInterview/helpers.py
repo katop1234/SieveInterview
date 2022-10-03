@@ -1,3 +1,5 @@
+import json
+
 import torch
 import psutil
 import shutil
@@ -310,9 +312,7 @@ def get_likelihoods_of_person_type(id, arr):
     return likelihoods
 
 def get_predicted_type_for_each_id(seen, id_to_likelihood):
-    print("ID TO LIKELIHOOD")
     id_to_likelihood.sort(key=lambda x: x["id"])
-    print(id_to_likelihood)
 
     BLUE_DIST_THRESHOLD = 3750
     WHITE_DIST_THRESHOLD = 3750
@@ -333,11 +333,10 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
             continue
 
     # check if blue
-    count = 1
+    count = 0
     id_to_likelihood.sort(key = lambda x: x["blue"])
-    print("blue candidates", id_to_likelihood[:5])
     for detection in id_to_likelihood:
-        if count > MAX_BLUE:
+        if count == MAX_BLUE:
             break
 
         id = detection["id"]
@@ -349,11 +348,10 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
                         count += 1
 
     # check if white
-    count = 1
+    count = 0
     id_to_likelihood.sort(key=lambda x: x["white"])
-    print("white candidates", id_to_likelihood[:5])
     for detection in id_to_likelihood:
-        if count > MAX_WHITE:
+        if count == MAX_WHITE:
             break
 
         id = detection["id"]
@@ -371,8 +369,6 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
             if detection["ref"] < detection["blue"] and detection["ref"] < detection["white"]:
                 if detection["ref"] < 3000: predictions[id] = "ref"
 
-    print("PREDICTIONS BEFORE ASSINGING TO OTHER", "len predictions", len(predictions), "len seen", len(seen))
-    print(predictions)
     # assign remaining to other
     for detection in id_to_likelihood:
         other_id = detection["id"]
@@ -432,3 +428,12 @@ def show_masked(image_original, target_color):
 
     cv2.imshow("masked with " + str(color),  masked)
     return
+
+d = {1: 3, "a": 5, "16":[4112,4124]}
+
+def write_to_json(python_dict):
+    with open("all_objects.json", "w") as outfile:
+        json.dump(python_dict, outfile)
+    return
+
+write_to_json(d)

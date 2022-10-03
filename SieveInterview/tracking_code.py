@@ -78,12 +78,10 @@ while True:
         white_percent = get_mask_percent(cropped_image, "white")
         blue_percent = get_mask_percent(cropped_image, "blue")
         floor_percent = get_mask_percent(cropped_image, "floor")
-        print("id frame", id, FRAME_NUM, "white%", white_percent, "blue%", blue_percent, "floor%", floor_percent)
+        # print("id frame", id, FRAME_NUM, "white%", white_percent, "blue%", blue_percent, "floor%", floor_percent)
         cv2.imwrite(str(id) + ".png", cropped_image)
         likelihoods = get_likelihoods_of_person_type(id, cropped_image)
         id_and_likelihoods.append(likelihoods)
-
-    os.chdir(home_dir())
 
     # Make predictions based on likelihoods and show on the frame
     predictions = get_predicted_type_for_each_id(seen, id_and_likelihoods)
@@ -102,8 +100,8 @@ while True:
         seen[id] = id_type
 
     # Show the frame
-    cv2.imshow("roi", roi)
-    #show_masked(roi, "white")
+    # cv2.imshow("roi", roi)
+    # show_masked(roi, "white")
 
     # exit the video
     # todo i changed this to pause, but delete the continue to EXIT
@@ -113,10 +111,15 @@ while True:
             time.sleep(5)
         continue
 
-        cap.release()
-        cv2.destroyAllWindows()
-        print("Hit q to escape")
-        break
+    text_file = open("id_and_likelihood.txt", "w")
+    text_file.write(str(id_and_likelihoods))
+    text_file.close()
+
+    text_file = open("seen.txt", "w")
+    text_file.write(str(seen))
+    text_file.close()
+
+    os.chdir(home_dir())
 
     ALL_OBJECTS.append(frame_info)
     FRAME_NUM += 1
@@ -128,6 +131,5 @@ cv2.destroyAllWindows()
 # todo
 def write_to_json():
     return
-
 
 write_to_json(ALL_OBJECTS)
