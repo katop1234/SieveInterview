@@ -1,3 +1,5 @@
+these are my personal notes
+
 # resources
 # https://gist.github.com/Gabe-flomo/83783b2e37bb6ccbf8b752c2560682b5#file-image_clustering-py
 # https://gist.github.com/Gabe-flomo/83783b2e37bb6ccbf8b752c2560682b5#file-image_clustering-py

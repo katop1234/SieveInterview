@@ -59,7 +59,7 @@ def get_pixel_values_for_detections(detections, height, width):
     original input is of the form [x1, y1, x2, y2]
     where each value is actually a proportion from 0 to 1 of the pixel number
     we need it to be of the form [x1, y1, x2, y2] where each is the
-    actual pixel count (an integer)
+    actual pixel count (an integer) so we multiply x's by width and y's by height
     '''
 
     new_detections = []
@@ -81,7 +81,7 @@ def get_boxes_with_persons(boxes_all):
             boxes_persons.append(person)
     return boxes_persons
 def parse_through_video_for_cropped_objects(video_filename, num_frames_to_keep = -1):
-    '''Use this function for model tuning. Basically goes through the video and
+    '''Use this function for testing. Basically goes through the video and
     any time yolo detects a person, it stores the box in a specified folder. Helpful for
     debugging and seeing what the persons look like'''
     frames_folder_path = home_dir() + "boxes/"
@@ -184,7 +184,7 @@ def clear_folder(folder_name):
         print("WARNING: the folder you specified to clear does not exist", folder_name)
     os.mkdir(folder_name)
 
-def get_output_folder(groups):
+def get_kmeans_clusters_output(groups):
     '''get output folder for k-means clustering groups. each folder will have
     the boxes of the identified objects for that cluster'''
     output_folder = home_dir() + "output/"
@@ -210,7 +210,7 @@ def get_frames_of_video(video_filename):
 kmeans_centers = read_obj("kmeans.centers")
 
 def get_center_of_centers(l):
-    '''returns center of a list of vectors'''
+    '''returns mean of a list of vectors'''
     output = []
     coord = 0
     for j in range(len(l[0])):
@@ -235,7 +235,7 @@ def sq_dist_between_two_vectors(a, b):
     return val
 
 def get_variance_of_clusters(l):
-    '''returns the variance of a list of vectors (which are supposed to be a cluster).
+    '''returns the variance of a list of vectors
     Variance is the average squared distance to the mean over that cluster'''
     center_point = get_center_of_centers(l)
     var = 0
@@ -278,8 +278,9 @@ def get_vector(box_file_path):
 
 def get_vector_from_array(arr):
     '''Gets the feature vector for a arr object representing a frame in cv2'''
-    cv2.imwrite(home_dir() + "serialized/" + 'temp.png',
-                arr)  # todo use for debugging to see the cropped image
+    # uncomment to use for debugging to see the cropped image
+    # cv2.imwrite(home_dir() + "serialized/" + 'temp.png', arr)
+
     return get_vector(home_dir() + "serialized/" + 'temp.png')
 
 # Helper functions use these below
@@ -293,7 +294,7 @@ ref_center3 = read_obj("ref.center3")
 
 def get_ref_val(vector):
     '''Sq dist to referee k-means center. I used 4 because i found that
-    many good clusters and just decided to take the avg dist'''
+    many good clusters for refs and just decided to take the avg dist'''
     return np.mean([
         sq_dist_between_two_vectors(vector, ref_center0),
         sq_dist_between_two_vectors(vector, ref_center1),
@@ -312,7 +313,8 @@ def get_white_val(vector):
 def get_likelihoods_of_person_type(id, arr):
     '''Gives the sq dist to the center of the white, blue, and referee clusters.
     Also gives the percent of the box that has a certain color range. These are
-    all used in determining the class for that object id'''
+    all used in determining the class for that object id
+    '''
     vector = get_vector_from_array(arr)
 
     white_val = get_white_val(vector)
@@ -320,42 +322,54 @@ def get_likelihoods_of_person_type(id, arr):
     ref_val = get_ref_val(vector)
     white_percent = get_mask_percent(arr, "white")
     blue_percent = get_mask_percent(arr, "blue")
+    black_percent = get_mask_percent(arr, "black")
     floor_percent = get_mask_percent(arr, "floor")
+
 
     likelihoods = {
                     "white": white_val,
                    "blue": blue_val,
                     "ref": ref_val,
+                    "black_percent": black_percent,
                    "white_percent": white_percent,
                    "blue_percent": blue_percent,
                    "floor_percent": floor_percent,
-                   "id": id
+                   "id": id,
                    }
 
     # Ease of reading when debugging
     for key in likelihoods:
         likelihoods[key] = round(likelihoods[key], 2)
+
     return likelihoods
 
 def get_predicted_type_for_each_id(seen, id_to_likelihood):
     '''Takes in a seen dictionary of object ids already seen and classified,
     as well as id_to_likelihood dict with the id of each object in the current frame and
     relevant likeliehoods that help me determine which class they're in.
-    Returns predictions of the form {id1: "blue", id2: "white ...etc}'''
+    Returns predictions of the form {id1: "blue", id2: "white" ...etc}'''
     # These thresholds were set through manual inspection
 
-    # For distance to center of K-means cluster
-    BLUE_DIST_THRESHOLD = 3750
-    WHITE_DIST_THRESHOLD = 3750
-
-    # For minimum percentage of this color
+    # For threshold of mask percentage of this color
+    BLACK_PERCENT_THRESHOLD = 30
     BLUE_PERCENT_THRESHOLD = 5
     WHITE_PERCENT_THRESHOLD = 15
     FLOOR_PERCENT_THRESHOLD = 7.5
 
+    # A white player must have at least this many more white pixels
+    # than blue ones. vice versa for a blue player.
+    white_player_w_to_b_ratio = 6
+    blue_player_b_to_w_ratio = 1/2
+
     # No more than these many players for that class
     MAX_BLUE_PLAYERS = 5
     MAX_WHITE_PLAYERS = 5
+
+    blue_count = 0
+    white_count = 0
+
+    # Upper bound for how large the sq dist to the referee vector can be
+    REF_DIST_THRESHOLD = 3400
 
     predictions = {"id": "type"}
 
@@ -366,46 +380,63 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
             predictions[id] = seen[id]
             continue
 
+    # First check if any other persons are above the floor percent threshold and assign them
+    # to whatever more mask percent they have. I found this to be the best indicator
+    # of belonging to a class (more than embeddings).
+    for detection in id_to_likelihood:
+        id = detection["id"]
+        if id not in predictions:
+            if detection["floor_percent"] > FLOOR_PERCENT_THRESHOLD:
+                # Compares using mask percent only
+                if detection["black_percent"] > BLACK_PERCENT_THRESHOLD:
+                    predictions[id] = "ref"
+
+                elif detection["blue_percent"] > detection["white_percent"] * blue_player_b_to_w_ratio:
+                    if detection["blue_percent"] > BLUE_PERCENT_THRESHOLD and blue_count <= MAX_BLUE_PLAYERS:
+                        predictions[id] = "blue"
+                        blue_count += 1
+
+                elif detection["white_percent"] > detection["blue_percent"] * white_player_w_to_b_ratio:
+                    if detection["white_percent"] > WHITE_PERCENT_THRESHOLD and white_count <= MAX_WHITE_PLAYERS:
+                        predictions[id] = "white"
+                        white_count += 1
+
     # Check for blue players
     # Sort by dist to blue players k-means center
     id_to_likelihood.sort(key = lambda x: x["blue"])
-
-    count = 0
     for detection in id_to_likelihood:
-        if count == MAX_BLUE_PLAYERS:
+        if blue_count >= MAX_BLUE_PLAYERS:
             break
 
         id = detection["id"]
         if id not in predictions:
-            if detection["blue"] < detection["ref"] and detection["blue"] < detection["white"]:
-                if detection["floor_percent"] > FLOOR_PERCENT_THRESHOLD and detection["blue"] < BLUE_DIST_THRESHOLD:
+            if detection["floor_percent"] > FLOOR_PERCENT_THRESHOLD:
+                if detection["blue"] < detection["ref"] and detection["blue"] < detection["white"]:
                     if detection["blue_percent"] > BLUE_PERCENT_THRESHOLD:
                         predictions[id] = "blue"
-                        count += 1
+                        blue_count += 1
 
     # Check for white players
     # Sort by dist to white players k-means center
     id_to_likelihood.sort(key=lambda x: x["white"])
-
-    count = 0
     for detection in id_to_likelihood:
-        if count == MAX_WHITE_PLAYERS:
+        if white_count >= MAX_WHITE_PLAYERS:
             break
 
         id = detection["id"]
         if id not in predictions:
-            if detection["white"] < detection["ref"] and detection["white"] < detection["blue"]:
-                if detection["floor_percent"] > FLOOR_PERCENT_THRESHOLD and detection["white"] < WHITE_DIST_THRESHOLD:
+            if detection["floor_percent"] > FLOOR_PERCENT_THRESHOLD:
+                if detection["white"] < detection["ref"] and detection["white"] < detection["blue"]:
                     if detection["white_percent"] > WHITE_PERCENT_THRESHOLD:
                         predictions[id] = "white"
-                        count += 1
+                        white_count += 1
 
     # Check for referees
     for detection in id_to_likelihood:
         id = detection["id"]
         if id not in predictions:
             if detection["ref"] < detection["blue"] and detection["ref"] < detection["white"]:
-                if detection["ref"] < 3000:
+                if detection["ref"] < REF_DIST_THRESHOLD or detection["floor_percent"] < FLOOR_PERCENT_THRESHOLD:
                     predictions[id] = "ref"
 
     # Assign remaining persons to "other"
@@ -419,12 +450,17 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
 def get_output_video():
     ''' get output video with labelled boxes for submission'''
     img_array = []
-    for filename in glob(home_dir() + "/frames_for_submission_video/*.png"):
+    for filename in sorted(glob(home_dir() + "frames_for_submission_video/*.png")):
         img = cv2.imread(filename)
+        if img is None:
+            # Happens when the frame is corrupted
+            print("Warning: got a NoneType image for", filename)
+            continue
         height, width, layers = img.shape
         size = (width, height)
         img_array.append(img)
 
+    print("Generating the video...")
     out = cv2.VideoWriter('output_video.avi', cv2.VideoWriter_fourcc(*'DIVX'), 15, size)
 
     for i in range(len(img_array)):

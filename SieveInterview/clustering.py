@@ -19,17 +19,15 @@ print("USING", len(PERSONS), "BOXES")
 
 # CNN model that outputs the embedding for an image
 # https://machinelearningmastery.com/use-pre-trained-vgg-model-classify-objects-photographs/
-model = VGG16()
-model = Model(inputs=model.inputs,
-              outputs=model.layers[-2].output)
-
+cnn_model = get_cnn_model()
 data = {}
 output_folder = PATH + "kmeans_clusters/"
 
 # loop through each image in the dataset and assign the embedding to the filename in data
 for count, person in enumerate(PERSONS):
-    feat = extract_features(person, model)
+    feat = extract_features(person, cnn_model)
     data[person] = feat
+
     if count % 50 == 0:
         print(str(100 * count / len(PERSONS)) + "% done with feature extraction")
 
@@ -40,18 +38,22 @@ filenames = np.array(list(data.keys()))
 feat = np.array(list(data.values()))
 
 # reshape so that there are n samples of 4096 vectors
-feat = feat.reshape(-1, 4096) # todo what is this dims, is it optimal for my pca?
+feat = feat.reshape(-1, 4096)
 
 # get the unique labels
 labels = [i for i in range(20)] # keeping 20 for now then manually sorting the labels within subclasses
 unique_labels = list(set(labels))
 
 # reduce the amount of dimensions in the feature vector
-pca = PCA(n_components=100, random_state=22) # use 100, kinda overkill but can't hurt.
+
+pca = PCA(n_components=100, random_state=22)
 pca.fit(feat)
 
+# serialize this because we'll use it everytime we get an embedding for a box
 write_obj(pca, "fit.pca")
 
+# I reduced to 100 dimensions, kinda overkill but can't hurt.
+# 100 explains 84% of the variance which is good enough for me.
 pca_predictive_powers = pca.explained_variance_ratio_
 print("PCA PREDICTS THIS MUCH VARIATION", sum(pca_predictive_powers), pca_predictive_powers)
 x = pca.transform(feat)
@@ -103,13 +105,13 @@ write_obj(kmeans_centers, "kmeans.centers")
 
 # In output_folder, see the images in each group
 for group in groups:
-    random.shuffle(groups[group]) # makes sure each subcluster is uniform
+    random.shuffle(groups[group])
     group_folder = output_folder + str(group)
     os.mkdir(group_folder)
     for count, frame in enumerate(groups[group]):
         shutil.copyfile(frame, group_folder + "/" + str(count))
 
-get_output_folder(groups)
+get_kmeans_clusters_output(groups)
 
 play_sound()
 plt.show()

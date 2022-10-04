@@ -7,8 +7,8 @@ How my code works:
 1. Run clustering.py to get ~20 clusters of boxes across the entire video. 
 I hope that I can find clusters corresponding to each of the 3 target classes among
 these 20 and use them as baselines.
-- I use yolov5 to identify each box, then get the second-to-last layer from 
-a VGG model run for each box to get that box's embedding. 
+- For the clustering, I use yolov5 to identify each box, then get the second-to-last
+ layer from a VGG model run for each box to get that box's embedding. 
 - Then I run PCA and reduce it to 100 dimensions to get a unique 100-dimensional
 vector for each box. 
 - Finally, I use kmeans clustering to group them into ~20 clusters
@@ -27,11 +27,11 @@ dimensions and compare its distance to one of the three previously determined
 center vectors for each class. 
 - Since the above wasn't giving me sufficient accuracy, I also add "masking"
 code that checks what percent of pixels in each box correspond to white, blue, 
-or floor and used that as an additional heuristic. I know this would require 
+black, or floor and used that as an additional heuristic. I know this would require 
 more manual intervention if the lighting or team color changes, but I found
 the code wasn't that hard to write and improved accuracy a bit.
+- The code for the classification is in helpers.get_predicted_type_for_each_id
 - I added logic for tracking over multiple frames from code I found online.
-- The results are all stored in the home folder.
 
 '''
 
@@ -60,7 +60,6 @@ all_boxes_ids = []
 cap = cv2.VideoCapture(get_video_filename())
 model = get_yolo_model()
 seen = {"id": "object_type"}
-clear_folder(home_dir() + "detections/")
 
 FRAME_NUM = 0
 while True:
@@ -91,13 +90,15 @@ while True:
     os.chdir("detections/")
     frame_dir = "frame" + str(FRAME_NUM)
     if not os.path.exists(frame_dir): os.mkdir(frame_dir)
+    clear_folder(home_dir() + "detections/frame" + str(FRAME_NUM))
     os.chdir(frame_dir)
 
-    id_and_likelihoods = []
     print("------------------------------FRAME", FRAME_NUM, "------------------------------")
+
+    id_and_likelihoods = []
+
     # Sort boxes by id
     boxes_ids.sort(key=lambda x:x[4])
-
     for box_id in boxes_ids:
         x1, y1, x2, y2, id = box_id
         cropped_image = roi[y1:y2, x1:x2]
@@ -112,7 +113,7 @@ while True:
         likelihoods = get_likelihoods_of_person_type(id, cropped_image)
         id_and_likelihoods.append(likelihoods)
 
-    # Make predictions based on likelihoods and show on the frame
+    # Make predictions based on likelihoods and previously seen stuff
     predictions = get_predicted_type_for_each_id(seen, id_and_likelihoods)
 
     # Store the box in detections/frame_number/
@@ -142,7 +143,8 @@ while True:
         seen[id] = id_type
 
     # Stores png of current frame
-    cv2.imwrite(home_dir() + "/frames_for_submission_video/" + "frame" + str(FRAME_NUM) + ".png", roi)
+    frame_num_str = str(FRAME_NUM).zfill(4)
+    cv2.imwrite(home_dir() + "/frames_for_submission_video/" + "frame" + frame_num_str + ".png", roi)
 
     # Show the frame
     # cv2.imshow("roi", roi)
@@ -164,9 +166,7 @@ while True:
     text_file.close()
 
     os.chdir(home_dir())
-
     ALL_OBJECTS.append(frame_info)
-    FRAME_NUM += 1
 
 cap.release()
 cv2.destroyAllWindows()
