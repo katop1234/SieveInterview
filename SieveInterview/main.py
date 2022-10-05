@@ -62,8 +62,28 @@ model = get_yolo_model()
 seen = {"id": "object_type"}
 
 FRAME_NUM = 0
+
+# for debugging
+frame_num_to_start_at = 0
+frame_num_to_end_at = 1900
+
 while True:
     ret, frame = cap.read()
+
+    if FRAME_NUM < frame_num_to_start_at:
+        FRAME_NUM += 1
+        continue
+
+    # Video is done
+    if ret is False or FRAME_NUM >= frame_num_to_end_at:
+        break
+
+    # Pause the video
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        print("press q to unpause")
+        while not (cv2.waitKey(1) & 0xFF == ord('q')):
+            time.sleep(5)
+        continue
 
     frame_info = {}
     frame_info["frame_number"] = FRAME_NUM
@@ -75,17 +95,18 @@ while True:
     height, width, _ = roi.shape
 
     # 1. Object Detection
+    start = time.time()
     results = model(roi)
+    end = time.time()
     boxes_all = results.xyxyn[0]
     detections = get_boxes_with_persons(boxes_all)
     detections = [person.tolist() for person in detections]  # converts from tensor to float bc it's nicer
-    detections = [person[0:4] for person in detections] # person[4] just tells us object type
+    detections = [person[0:4] for person in detections]  # person[4] just tells us object type
     detections = get_pixel_values_for_detections(detections, height, width)  # cleans up detections
-
     # 2. Object Tracking
+
     boxes_ids = tracker.update(detections)
     all_boxes_ids.append(boxes_ids)
-
     # Gets likelihood of belonging to each class for each id
     os.chdir("detections/")
     frame_dir = "frame" + str(FRAME_NUM)
@@ -98,7 +119,7 @@ while True:
     id_and_likelihoods = []
 
     # Sort boxes by id
-    boxes_ids.sort(key=lambda x:x[4])
+    boxes_ids.sort(key=lambda x: x[4])
     for box_id in boxes_ids:
         x1, y1, x2, y2, id = box_id
         cropped_image = roi[y1:y2, x1:x2]
@@ -107,25 +128,36 @@ while True:
         white_percent = get_mask_percent(cropped_image, "white")
         blue_percent = get_mask_percent(cropped_image, "blue")
         floor_percent = get_mask_percent(cropped_image, "floor")
-        # print("id frame", id, FRAME_NUM, "white%", white_percent, "blue%", blue_percent, "floor%", floor_percent)
 
         # Get likelihoods of belonging to a class and add to list of current id's
-        likelihoods = get_likelihoods_of_person_type(id, cropped_image)
+        box_coords = [x1, y1, x2, y2]
+        likelihoods = get_likelihoods_of_person_type(id, cropped_image, box_coords)
         id_and_likelihoods.append(likelihoods)
 
     # Make predictions based on likelihoods and previously seen stuff
-    predictions = get_predicted_type_for_each_id(seen, id_and_likelihoods)
+    predictions, updated_ids = get_predicted_type_for_each_id(seen, id_and_likelihoods, tracker)
+
+    # update boxes_ids in case we changed the type of an existing object in the previous step
+    print("new id map", updated_ids, "preds", predictions)
+    for i in range(len(boxes_ids)):
+        box = boxes_ids[i]
+        curr_id = box[4]
+        if curr_id in updated_ids:
+            print("box old", boxes_ids[i])
+            boxes_ids[i][4] = updated_ids[curr_id]
+            print("box new", boxes_ids[i])
+
 
     # Store the box in detections/frame_number/
-    for box_id in boxes_ids:
-        x1, y1, x2, y2, id = box_id
+    for box in boxes_ids:
+        x1, y1, x2, y2, id = box
         id_type = predictions[id]
         cropped_image = roi[y1:y2, x1:x2]
         cv2.imwrite(str(id) + "_" + id_type + ".png", cropped_image)
 
     # Show boxes on screen and update the all_objects dict
-    for box_id in boxes_ids:
-        x1, y1, x2, y2, id = box_id
+    for box in boxes_ids:
+        x1, y1, x2, y2, id = box
         id_type = predictions[id]
 
         # Show bounding boxes
@@ -150,13 +182,6 @@ while True:
     # cv2.imshow("roi", roi)
     # show_masked(roi, "white")
 
-    # Pause the video
-    if cv2.waitKey(1) & 0xFF == ord('q') or ret == False:
-        print("press q to unpause")
-        while not (cv2.waitKey(1) & 0xFF == ord('q')):
-            time.sleep(5)
-        continue
-
     # Saves likelihoods and relevant data in each frame folder for debugging
     text_file = open("id_and_likelihood.txt", "w")
     text_file.write(str(id_and_likelihoods))
@@ -167,6 +192,13 @@ while True:
 
     os.chdir(home_dir())
     ALL_OBJECTS.append(frame_info)
+
+    FRAME_NUM += 1
+
+    # in case of error
+    write_obj(tracker, "tracker.instance")
+    write_obj(seen, "seen.ids")
+    write_obj(ALL_OBJECTS, "all.objects")
 
 cap.release()
 cv2.destroyAllWindows()

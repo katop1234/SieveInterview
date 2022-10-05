@@ -56,10 +56,12 @@ def tensor_row_is_person(row):
 
 def get_pixel_values_for_detections(detections, height, width):
     '''
-    original input is of the form [x1, y1, x2, y2]
+    original detection input is of the form [x1, y1, x2, y2]
     where each value is actually a proportion from 0 to 1 of the pixel number
     we need it to be of the form [x1, y1, x2, y2] where each is the
     actual pixel count (an integer) so we multiply x's by width and y's by height
+
+    returns list of sublists, where each sublist is the pixel coordinates of the boxes
     '''
 
     new_detections = []
@@ -310,23 +312,25 @@ def get_white_val(vector):
     '''sq dist to center of white players cluster'''
     return sq_dist_between_two_vectors(vector, white_vector)
 
-def get_likelihoods_of_person_type(id, arr):
+def get_likelihoods_of_person_type(id, arr, box_coords):
     '''Gives the sq dist to the center of the white, blue, and referee clusters.
     Also gives the percent of the box that has a certain color range. These are
     all used in determining the class for that object id
     '''
+    start = time.time() # todo
+    # todo uncomment these for embeddings
     vector = get_vector_from_array(arr)
-
     white_val = get_white_val(vector)
     blue_val = get_blue_val(vector)
     ref_val = get_ref_val(vector)
+
     white_percent = get_mask_percent(arr, "white")
     blue_percent = get_mask_percent(arr, "blue")
     black_percent = get_mask_percent(arr, "black")
     floor_percent = get_mask_percent(arr, "floor")
 
-
     likelihoods = {
+                    "id": id,
                     "white": white_val,
                    "blue": blue_val,
                     "ref": ref_val,
@@ -334,21 +338,69 @@ def get_likelihoods_of_person_type(id, arr):
                    "white_percent": white_percent,
                    "blue_percent": blue_percent,
                    "floor_percent": floor_percent,
-                   "id": id,
+                    "box_coords": box_coords,
                    }
 
     # Ease of reading when debugging
     for key in likelihoods:
-        likelihoods[key] = round(likelihoods[key], 2)
+        if key != "box_coords":
+            likelihoods[key] = round(likelihoods[key], 2)
 
+    end = time.time() # todo delete all time.time() at end
     return likelihoods
 
-def get_predicted_type_for_each_id(seen, id_to_likelihood):
-    '''Takes in a seen dictionary of object ids already seen and classified,
+
+def update_type(id, seen, predictions, detection, tracker, updated_ids):
+    '''
+    Use this as a helper to get_predicted_type_for_each_id
+    Basically if we see an object with an existing id that is now classified
+    as a different type, we want to assign it a new id and to the new type so
+    the tracking code doesn't keep following something that erroneously belongs
+    to another class.
+
+    :param updated_ids: pointer to dictionary that maps old to new ids that have been updated to a different type
+    :param id: id of object to update
+    :param seen: dict of seen objects
+    :param predictions: dict of current predictions
+    :param detection: current detection
+    :param tracker: tracker object instantiated in in main.py
+    :return: new_id, new_type (both ints)
+    '''
+
+    # don't want to change to other because it could mean a player j went out of bounds
+    # or something
+
+    # Updating the object because the type changed
+    if id in seen and seen[id] != predictions[id] and predictions[id] != "other":
+        new_type = predictions[id]
+        id_to_replace = id
+        box_coords = detection["box_coords"]
+        new_id = tracker.replace(box_coords, id_to_replace)
+        updated_ids[0][id] = new_id
+
+        del predictions[id]
+        seen[new_id], predictions[new_id] = new_type, new_type
+        print("successfully updated", id, "from", seen[id], "to", new_type)  # todo delete all print statements at the end
+        return new_id, seen, predictions
+
+    # A new object was detected altogether so don't do anything
+    # or the new predicted type was other so we'll ignore it because it could just
+    # be a player out of bounds
+    else:
+        return id, seen, predictions
+
+def get_predicted_type_for_each_id(seen, id_to_likelihood, tracker):
+    '''
+    Takes in a seen dictionary of object ids already seen and classified,
     as well as id_to_likelihood dict with the id of each object in the current frame and
     relevant likeliehoods that help me determine which class they're in.
-    Returns predictions of the form {id1: "blue", id2: "white" ...etc}'''
+    Returns predictions of the form {id1: "blue", id2: "white" ...etc}
+    '''
+
     # These thresholds were set through manual inspection
+    start = time.time()
+
+    updated_ids = [{}] # use pointer so i can access from other functions
 
     # For threshold of mask percentage of this color
     BLACK_PERCENT_THRESHOLD = 30
@@ -373,13 +425,6 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
 
     predictions = {"id": "type"}
 
-    # If we know the type from previous frame
-    for detection in id_to_likelihood:
-        id = detection["id"]
-        if id in seen:
-            predictions[id] = seen[id]
-            continue
-
     # First check if any other persons are above the floor percent threshold and assign them
     # to whatever more mask percent they have. I found this to be the best indicator
     # of belonging to a class (more than embeddings).
@@ -391,16 +436,30 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
                 if detection["black_percent"] > BLACK_PERCENT_THRESHOLD:
                     predictions[id] = "ref"
 
-                elif detection["blue_percent"] > detection["white_percent"] * blue_player_b_to_w_ratio:
-                    if detection["blue_percent"] > BLUE_PERCENT_THRESHOLD and blue_count <= MAX_BLUE_PLAYERS:
-                        predictions[id] = "blue"
-                        blue_count += 1
+                    new_id, seen, predictions = update_type(id, seen, predictions, detection, tracker, updated_ids)
+                    detection["id"] = new_id
+                    continue
 
-                elif detection["white_percent"] > detection["blue_percent"] * white_player_w_to_b_ratio:
-                    if detection["white_percent"] > WHITE_PERCENT_THRESHOLD and white_count <= MAX_WHITE_PLAYERS:
+                if detection["blue_percent"] > BLUE_PERCENT_THRESHOLD:
+                    if detection["blue_percent"] > detection["white_percent"] * blue_player_b_to_w_ratio:
+                        if blue_count <= MAX_BLUE_PLAYERS:
+                            predictions[id] = "blue"
+                            blue_count += 1
+
+                            new_id, seen, predictions = update_type(id, seen, predictions, detection, tracker, updated_ids)
+                            detection["id"] = new_id
+                            continue
+
+                if detection["white_percent"] > WHITE_PERCENT_THRESHOLD:
+                    if white_count <= MAX_WHITE_PLAYERS:
                         predictions[id] = "white"
                         white_count += 1
 
+                        new_id, seen, predictions = update_type(id, seen, predictions, detection, tracker, updated_ids)
+                        detection["id"] = new_id
+                        continue
+
+    # todo do i need embeddings lol?
     # Check for blue players
     # Sort by dist to blue players k-means center
     id_to_likelihood.sort(key = lambda x: x["blue"])
@@ -413,9 +472,14 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
             if detection["floor_percent"] > FLOOR_PERCENT_THRESHOLD:
                 if detection["blue"] < detection["ref"] and detection["blue"] < detection["white"]:
                     if detection["blue_percent"] > BLUE_PERCENT_THRESHOLD:
+                        print("classified blue with embedding")
                         predictions[id] = "blue"
                         blue_count += 1
 
+                        new_id, seen, predictions = update_type(id, seen, predictions, detection, tracker, updated_ids)
+                        detection["id"] = new_id
+
+    # todo do i need this?
     # Check for white players
     # Sort by dist to white players k-means center
     id_to_likelihood.sort(key=lambda x: x["white"])
@@ -428,24 +492,37 @@ def get_predicted_type_for_each_id(seen, id_to_likelihood):
             if detection["floor_percent"] > FLOOR_PERCENT_THRESHOLD:
                 if detection["white"] < detection["ref"] and detection["white"] < detection["blue"]:
                     if detection["white_percent"] > WHITE_PERCENT_THRESHOLD:
+                        print("classified white with embedding")
                         predictions[id] = "white"
                         white_count += 1
 
+                        new_id, seen, predictions = update_type(id, seen, predictions, detection, tracker, updated_ids)
+                        detection["id"] = new_id
+
+    # todo do i need this?
     # Check for referees
     for detection in id_to_likelihood:
         id = detection["id"]
         if id not in predictions:
             if detection["ref"] < detection["blue"] and detection["ref"] < detection["white"]:
                 if detection["ref"] < REF_DIST_THRESHOLD or detection["floor_percent"] < FLOOR_PERCENT_THRESHOLD:
+                    print("classified ref with embedding")
                     predictions[id] = "ref"
+
+                    new_id, seen, predictions = update_type(id, seen, predictions, detection, tracker, updated_ids)
+                    detection["id"] = new_id
 
     # Assign remaining persons to "other"
     for detection in id_to_likelihood:
-        other_id = detection["id"]
-        if other_id not in predictions:
-            predictions[other_id] = "other"
+        id = detection["id"]
+        if id not in predictions:
+            predictions[id] = "other"
 
-    return predictions
+            new_id, seen, predictions = update_type(id, seen, predictions, detection, tracker, updated_ids)
+            detection["id"] = new_id
+
+    end = time.time() # todo
+    return predictions, updated_ids[0]
 
 def get_output_video():
     ''' get output video with labelled boxes for submission'''
@@ -474,7 +551,7 @@ def get_color_ranges():
         "black":  [[0, 0, 0], [85, 85, 85]],
         "blue": [[100, 70, 30], [255, 150, 100]],
         "floor-light": [[135, 165, 180], [195, 215, 235]],
-        "floor-dark": [[60, 120, 150], [90, 155, 180]]
+        "floor-dark": [[60, 120, 150], [105, 155, 180]]
     }
 
     return boundaries
@@ -498,23 +575,33 @@ def get_submission_type(id_type):
         return "other"
 
 def get_mask_percent(box, color):
+    start = time.time() # todo
     '''Returns what percentage of the box has pixels in the color range for that specified color'''
     if color == "floor":
         return get_mask_percent(box, "floor-dark") + get_mask_percent(box, "floor-light")
 
     lower = np.array(boundaries[color][0])
     upper = np.array(boundaries[color][1])
+    a1 = time.time()
     mask = cv2.inRange(box, lower, upper)
     masked = cv2.bitwise_and(box, box, mask=mask)
+    # print("getting mask took", time.time() - a1, "masked dimensions", len(masked), len(masked[0]))
 
+    a2 = time.time()
     no_pixel_array = np.array([0, 0, 0])
     count, total = 0, 0
+
     for i in range(len(masked)):
         for j in range(len(masked[i])):
-            total += 1
             curr_pixel_array = masked[i][j]
+            total += 1
             if not np.array_equal(curr_pixel_array, no_pixel_array):
                 count += 1
+
+    # print("iterating over all the pixels took", time.time() - a2)
+
+    end = time.time()
+    # print("get_mask_percent", end - start)
     return 100 * count / total
 
 def get_region_of_interest(frame):
@@ -565,3 +652,5 @@ def write_to_json(python_dict, file_name="all_objects.json"):
     with open(file_name, "w") as outfile:
         json.dump(python_dict, outfile)
     return
+
+# get_output_video()
